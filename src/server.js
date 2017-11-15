@@ -2,45 +2,108 @@ const bodyParser = require('body-parser');
 const express = require('express');
 
 const STATUS_USER_ERROR = 422;
+const STATUS_CREATED = 201;
+
+// This array of posts persists in memory across requests. Feel free
+// to change this to a let binding if you need to reassign it.
+let posts = [];
+
+// a monotonically increasing next ID to assign to the next post
+let nextID = 1;
+
 const server = express();
 // to enable parsing of json bodies for post requests
 server.use(bodyParser.json());
 
-// This array of posts persists in memory across requests. Feel free
-// to change this to a let binding if you need to reassign it.
-const posts = [
-	{
-        "title": "The post title1",
-        "contents": "The post contents1"
-    },
-    {
-        "title": "The post title2",
-        "contents": "The post contents2"
-    },
-    {
-        "title": "The post title3",
-        "contents": "The post contents3"
-    }
-];
-
-server.get('/posts', function(req, res) {
-	// 3 ways of getting term from server:
-	// 1.req.query: localhost:3000/posts?term=the post title1 -> req.query.term
-	// 2.req.body 
-	// 3.req.params: localhost:3000/posts/:id -> localhost:3000/posts/:id
-	const term = req.query.term.toLowerCase();
-	const results = posts.filter(post => post.title.toLowerCase().includes(term));
-
-	res.status(200).json(results);
+server.get('/posts', (req, res) => {
+  const term = req.query.term;
+  if (term) {
+    // respond with posts matching the given term
+    const filtered = posts.filter((post) => {
+      return post.title.indexOf(term) !== -1 ||
+        post.contents.indexOf(term) !== -1;
+    });
+    res.json(filtered);
+  } else {
+    res.json(posts);
+  }
 });
 
-// TODO: your code to handle requests
 server.post('/posts', (req, res) => {
-	const post = req.body;
+  const { title, contents } = req.body;
 
-	posts.push(post);
+  if (!title) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide a post title' });
+    return;
+  }
+  if (!contents) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide a post contents' });
+    return;
+  }
 
-	res.status(201).json(posts);
+  const post = { id: nextID, title, contents };
+  nextID += 1;
+
+  posts.push(post);
+
+  // save to database
+
+  res.status(STATUS_CREATED).json(post);
+});
+
+server.put('/posts', (req, res) => {
+  const { id, title, contents } = req.body;
+
+  if (!id) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide a post id' });
+    return;
+  }
+  // DRY postIsValid(post)
+  if (!title) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide a post title' });
+    return;
+  }
+  if (!contents) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide post contents' });
+    return;
+  }
+
+  const post = posts.find(p => p.id === id);
+  if (!post) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: `Couldn't find a post with id ${id}` });
+    return;
+  }
+
+  // easier to update post object directly than replace it in the array
+  post.title = title;
+  post.contents = contents;
+  res.json(post);
+});
+
+server.delete('/posts', (req, res) => {
+  const { id } = req.body;
+
+  if (!id) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: 'Must provide a post id' });
+    return;
+  }
+
+  const post = posts.find(p => p.id === id);
+  if (!post) {
+    res.status(STATUS_USER_ERROR);
+    res.json({ error: `Couldn't find a post with id ${id}` });
+    return;
+  }
+
+  posts = posts.filter(p => p.id !== id);
+  res.json({ success: true });
 });
 
 module.exports = { posts, server };
